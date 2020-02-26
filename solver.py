@@ -3,7 +3,6 @@ import torch.nn.functional as F
 from tensorboard import summary
 from torchvision.utils import save_image
 
-
 from model import Generator, Discriminator
 from utils import Utils
 
@@ -16,8 +15,6 @@ import random
 import glob
 
 
-
-
 class Solver(Utils):
 
     def __init__(self, data_loader, config_dict):
@@ -28,7 +25,7 @@ class Solver(Utils):
         self.data_loader = data_loader
 
         self.device = 'cuda:' + \
-            str(self.gpu_id) if torch.cuda.is_available() else 'cpu'
+                      str(self.gpu_id) if torch.cuda.is_available() else 'cpu'
         print(f"Model running on {self.device}")
 
         if self.use_tensorboard:
@@ -38,19 +35,19 @@ class Solver(Utils):
 
         self.build_model()
 
-
-
-
     def train(self):
         print('Training...')
 
         self.global_counter = 0
         self.first_scale = 0
-        self.num_scale = 1
+        self.num_scale = 2
         self.num_scale_prev = 1
+        self.scale = 0
 
         if self.resume_iters:
             self.first_iteration = self.resume_iters
+            #Tiến hành load lại model khi ở scale kế tiếp
+            #Nhưng mình muốn innit lại model khi ở scale kế tiếp
             self.restore_model(self.resume_iters)
         else:
             self.first_iteration = 0
@@ -60,31 +57,30 @@ class Solver(Utils):
         self.get_training_data()
 
         for scale in range(self.first_scale, self.num_scale):
+            self.scale_current = scale
 
             for iteration in range(1000):
-
 
                 self.iteration = iteration
 
                 self.train_discriminator()
-                #đầu tiên train discriminator
+                # đầu tiên train discriminator
 
-                if (self.iteration+1) % self.n_critic == 0:
+                if (self.iteration + 1) % self.n_critic == 0:
                     generation_outputs = self.train_generator()
 
-
-                if (self.iteration+1) % self.sample_step == 0:
+                if (self.iteration + 1) % self.sample_step == 0:
                     self.print_generations(generation_outputs)
 
                 if self.iteration % self.model_save_step == 0:
-                    self.save_models(self.iteration, self.epoch)
+                    self.save_models(self.iteration, self.scale)
 
-                if self.iteration % self.log_step == 0:
-                    self.update_tensorboard()
-                    self.global_counter += 1
+                self.update_tensorboard()
+                self.global_counter += 1
+            # if self.iteration % self.log_step == 0:
 
             # Decay learning rates. , giảm learning rate, giảm đi 0.1
-            if (self.iteration+1) > self.num_epochs_decay:
+            if (self.iteration + 1) > self.num_epochs_decay:
                 # float(self.num_epochs_decay))
                 self.g_lr -= (self.g_lr / 10.0)
                 # float(self.num_epochs_decay))
@@ -96,29 +92,27 @@ class Solver(Utils):
             # Save the last model, lưu model cuối cùng lại
             '''
             TO DO: 
-            
+
             '''
             self.num_scale_prev = self.num_scale
-            self.save_models()
+            self.save_models(self.iteration, self.scale)
             '''
             TODO: 
             upscale của hình tái cấu trúc lên trước khi bỏ vào x_real
             Sau đó, rest các tham số train về lại từ đầu 
             '''
 
-
-
     def get_training_data(self):
 
         self.x_real, self.label_org = self.data_loader.dataset[0]
-#        print(self.x_real.size())
-#        print(self.label_org)
-        self.x_real = self.x_real.view(-1,3,128,128)
+        #        print(self.x_real.size())
+        #        print(self.label_org)
+        self.x_real = self.x_real.view(-1, 3, 128, 128)
         self.x_real = self.x_real.to(self.device)
         # Lấy hình ảnh thật
         # Labels for computing classification loss.
         self.label_org = self.label_org.to(self.device)
-        #Tính AUs gốc
+        # Tính AUs gốc
 
         # Get random targets for training
         self.label_trg = self.get_random_labels_list()
@@ -147,27 +141,26 @@ class Solver(Utils):
     def train_discriminator(self):
         # Compute loss with real images.
 
-        if(self.num_scale !=self.num_scale_prev):
-            self.x_real = self.imsize(self.x_real,3/4)
+        if (self.scale_current != self.num_scale_prev and self.scale_current != 0):
+            self.x_real = self.imsize(self.x_real, 3/4)
 
         critic_output, classification_output = self.D(self.x_real)
-        #lấy hai kết quả một cái của D_I và D_Y ra
+        # lấy hai kết quả một cái của D_I và D_Y ra
         d_loss_critic_real = -torch.mean(critic_output)
         # tính loss cho d
         d_loss_classification = torch.nn.functional.mse_loss(
             classification_output, self.label_org)
-        #tính loss cho d của phần loss mse của AUs_hat_fake - AUs_target
+        # tính loss cho d của phần loss mse của AUs_hat_fake - AUs_target
 
         # Compute loss with fake images.
         attention_mask, color_regression = self.G(self.x_real, self.label_trg)
         # tính mask attention và color lần đầu
         x_fake = self.imFromAttReg(
             attention_mask, color_regression, self.x_real)
-        #combined lại để ra hình fake
+        # combined lại để ra hình fake
         critic_output, _ = self.D(x_fake.detach())
         d_loss_critic_fake = torch.mean(critic_output)
         #  tính loss WGAN D_I(fake)
-
 
         # Compute loss for gradient penalty.
         alpha = torch.rand(self.x_real.size(0), 1, 1, 1).to(self.device)
@@ -176,12 +169,12 @@ class Solver(Utils):
                  * x_fake.data).requires_grad_(True)
         critic_output, _ = self.D(x_hat)
         d_loss_gp = self.gradient_penalty(critic_output, x_hat)
-        #Tính loss của d phần gradient penatly
+        # Tính loss của d phần gradient penatly
 
         # Backward and optimize.
         d_loss = d_loss_critic_real + d_loss_critic_fake + self.lambda_cls * \
-            d_loss_classification + self.lambda_gp * d_loss_gp
-        #Hàm loss tổng của Discriminator  = -gốc + giả + lamda_gp*loss_gp + conditional expression loss
+                 d_loss_classification + self.lambda_gp * d_loss_gp
+        # Hàm loss tổng của Discriminator  = -gốc + giả + lamda_gp*loss_gp + conditional expression loss
 
         self.reset_grad()
         d_loss.backward()
@@ -192,26 +185,25 @@ class Solver(Utils):
         self.loss_visualization['D/loss_real'] = d_loss_critic_real.item()
         self.loss_visualization['D/loss_fake'] = d_loss_critic_fake.item()
         self.loss_visualization['D/loss_cls'] = self.lambda_cls * \
-            d_loss_classification.item()
+                                                d_loss_classification.item()
         self.loss_visualization['D/loss_gp'] = self.lambda_gp * \
-            d_loss_gp.item()
+                                               d_loss_gp.item()
 
     def train_generator(self):
-        #Tại scale đầu tiên thì input của G là tấm ảnh thật, nhưng khi lên scale thứ hai thì input của G là ảnh tái cấu trúc từ scale trước nó.
-        if (self.num_scale <1):
-            self.inputG = self.x_real
-        else:
-            self.inputG = self.imsize(self.x_rec,scale_factor=7/4)
-
+        # Tại scale đầu tiên thì input của G là tấm ảnh thật, nhưng khi lên scale thứ hai thì input của G là ảnh tái cấu trúc từ scale trước nó.
+        self.inputG = self.x_real
+        if (self.scale_current > 1):
+            self.inputG = self.imsize(self.x_rec, scale_factor=7 / 4)
 
         # Original-to-target domain.
+        self.label_trg = self.label_trg.view(1, 17)
         attention_mask, color_regression = self.G(self.inputG, self.label_trg)
         # mask color và attention được tạo ra từ generator (input là x_real, label_trg)
         # upspamling -> x_real và label_trg
 
         x_fake = self.imFromAttReg(
             attention_mask, color_regression, self.inputG)
-        #x_fake gọi hàm combine 3 thành phần trên
+        # x_fake gọi hàm combine 3 thành phần trên
 
         critic_output, classification_output = self.D(x_fake)
         # đưa hình giả qua Discriminator  (critic_output là WGAN-GP, classification_output là y_hat - AUs)
@@ -223,12 +215,13 @@ class Solver(Utils):
 
         # Target-to-original domain.
         if not self.use_virtual:
+            self.label_org = self.label_org.view(1, 17)
             reconstructed_attention_mask, reconstructed_color_regression = self.G(
                 x_fake, self.label_org)
-            #mask attention và color của ảnh tái tạo là kết quả của x_fake và AUs_gốc
+            # mask attention và color của ảnh tái tạo là kết quả của x_fake và AUs_gốc
             x_rec = self.imFromAttReg(
                 reconstructed_attention_mask, reconstructed_color_regression, x_fake)
-            #tấm ảnh tái tạo combine lại như trên
+            # tấm ảnh tái tạo combine lại như trên
 
         else:
             reconstructed_attention_mask, reconstructed_color_regression = self.G(
@@ -254,52 +247,52 @@ class Solver(Utils):
 
         if not self.use_virtual:
             g_loss_rec = torch.nn.functional.l1_loss(self.inputG, x_rec)
-            #hàm lổi cycle loss nhằm ensure cùng một người ( hình thật và hình tái cấu trúc, chuẩn 1)
+            # hàm lổi cycle loss nhằm ensure cùng một người ( hình thật và hình tái cấu trúc, chuẩn 1)
             g_loss_saturation_2 = reconstructed_attention_mask.mean()
             # hàm lỗi cho mặt nạ tái tại  L_A
             g_loss_smooth2 = self.smooth_loss(reconstructed_attention_mask)
             # hàm lỗi cho mặt nạ mượt mà hơn
 
         else:
-            g_loss_rec = (1-self.alpha_rec)*torch.nn.functional.l1_loss(self.inputG, x_rec) + \
-                self.alpha_rec * \
-                torch.nn.functional.l1_loss(x_fake, x_rec_virtual)
+            g_loss_rec = (1 - self.alpha_rec) * torch.nn.functional.l1_loss(self.inputG, x_rec) + \
+                         self.alpha_rec * \
+                         torch.nn.functional.l1_loss(x_fake, x_rec_virtual)
 
-            g_loss_saturation_2 = (1-self.alpha_rec) * reconstructed_attention_mask.mean() + \
-                self.alpha_rec * reconstructed_virtual_attention_mask.mean()
+            g_loss_saturation_2 = (1 - self.alpha_rec) * reconstructed_attention_mask.mean() + \
+                                  self.alpha_rec * reconstructed_virtual_attention_mask.mean()
 
-            g_loss_smooth2 = (1-self.alpha_rec) * self.smooth_loss(reconstructed_virtual_attention_mask) + \
-                self.alpha_rec * self.smooth_loss(reconstructed_attention_mask)
+            g_loss_smooth2 = (1 - self.alpha_rec) * self.smooth_loss(reconstructed_virtual_attention_mask) + \
+                             self.alpha_rec * self.smooth_loss(reconstructed_attention_mask)
 
         g_attention_loss = self.lambda_smooth * g_loss_smooth1 + self.lambda_smooth * g_loss_smooth2 \
-            + self.lambda_sat * g_loss_saturation_1 + self.lambda_sat * g_loss_saturation_2
-        #Hàm lỗi attention tổng thể =  lambda_TV * ( loss mượt ảnh gốc + loss mượt ảnh tái cấu trúc) + lanbda_sat *( chuẩn 2 của hai mặt nạ)
+                           + self.lambda_sat * g_loss_saturation_1 + self.lambda_sat * g_loss_saturation_2
+        # Hàm lỗi attention tổng thể =  lambda_TV * ( loss mượt ảnh gốc + loss mượt ảnh tái cấu trúc) + lanbda_sat *( chuẩn 2 của hai mặt nạ)
 
         g_loss = g_loss_fake + self.lambda_rec * g_loss_rec + \
-            self.lambda_cls * g_loss_cls + g_attention_loss
-        #hàm loss tổng = note trong bài báo
+                 self.lambda_cls * g_loss_cls + g_attention_loss
+        # hàm loss tổng = note trong bài báo
 
         self.reset_grad()
         # reset gradient về 0
-        g_loss.backward() #backwark cho g
-        self.g_optimizer.step() # tối ưu hóa
+        g_loss.backward()  # backwark cho g
+        self.g_optimizer.step()  # tối ưu hóa
 
         # Logging.
         self.loss_visualization['G/loss'] = g_loss.item()
         self.loss_visualization['G/loss_fake'] = g_loss_fake.item()
         self.loss_visualization['G/loss_rec'] = self.lambda_rec * \
-            g_loss_rec.item()
+                                                g_loss_rec.item()
         self.loss_visualization['G/loss_cls'] = self.lambda_cls * \
-            g_loss_cls.item()
+                                                g_loss_cls.item()
         self.loss_visualization['G/attention_loss'] = g_attention_loss.item()
         self.loss_visualization['G/loss_smooth1'] = self.lambda_smooth * \
-            g_loss_smooth1.item()
+                                                    g_loss_smooth1.item()
         self.loss_visualization['G/loss_smooth2'] = self.lambda_smooth * \
-            g_loss_smooth2.item()
+                                                    g_loss_smooth2.item()
         self.loss_visualization['G/loss_sat1'] = self.lambda_sat * \
-            g_loss_saturation_1.item()
+                                                 g_loss_saturation_1.item()
         self.loss_visualization['G/loss_sat2'] = self.lambda_sat * \
-            g_loss_saturation_2.item()
+                                                 g_loss_saturation_2.item()
         self.loss_visualization['G/alpha'] = self.alpha_rec
 
         self.x_rec = x_rec
@@ -329,32 +322,32 @@ class Solver(Utils):
                 "x_rec_virtual": x_rec_virtual,
             }
 
-
-
     def print_generations(self, generator_outputs_dict):
         print_epoch_images = False
         save_image(self.denorm(self.x_real), self.sample_dir +
-                   '/{}_4real_.png'.format(self.epoch))
-        save_image((generator_outputs_dict["color_regression"]+1)/2,
-                   self.sample_dir + '/{}_2reg_.png'.format(self.epoch))
+                   '/{}_4real_.png'.format(self.scale_current))
+        save_image((generator_outputs_dict["color_regression"] + 1) / 2,
+                   self.sample_dir + '/{}_2reg_.png'.format(self.scale_current))
         save_image(self.denorm(
-            generator_outputs_dict["x_fake"]), self.sample_dir + '/{}_3res_.png'.format(self.epoch))
+            generator_outputs_dict["x_fake"]), self.sample_dir + '/{}_3res_.png'.format(self.scale_current))
         save_image(generator_outputs_dict["attention_mask"],
-                   self.sample_dir + '/{}_1attention_.png'.format(self.epoch))
+                   self.sample_dir + '/{}_1attention_.png'.format(self.scale_current))
         save_image(self.denorm(
-            generator_outputs_dict["x_rec"]), self.sample_dir + '/{}_5rec_.png'.format(self.epoch))
+            generator_outputs_dict["x_rec"]), self.sample_dir + '/{}_5rec_.png'.format(self.scale_current))
 
         if not self.use_virtual:
             save_image(generator_outputs_dict["reconstructed_attention_mask"],
-                       self.sample_dir + '/{}_6rec_attention.png'.format(self.epoch))
+                       self.sample_dir + '/{}_6rec_attention.png'.format(self.scale_current))
             save_image(self.denorm(
-                generator_outputs_dict["reconstructed_color_regression"]), self.sample_dir + '/{}_7rec_reg.png'.format(self.epoch))
+                generator_outputs_dict["reconstructed_color_regression"]),
+                self.sample_dir + '/{}_7rec_reg.png'.format(self.scale_current))
 
         else:
             save_image(generator_outputs_dict["reconstructed_attention_mask"],
                        self.sample_dir + '/{}_6rec_attention_.png'.format(self.epoch))
             save_image(self.denorm(
-                generator_outputs_dict["reconstructed_color_regression"]), self.sample_dir + '/{}_7rec_reg.png'.format(self.epoch))
+                generator_outputs_dict["reconstructed_color_regression"]),
+                self.sample_dir + '/{}_7rec_reg.png'.format(self.epoch))
 
             save_image(generator_outputs_dict["reconstructed_virtual_attention_mask"],
                        self.sample_dir + '/{}_8rec_virtual_attention.png'.format(self.epoch))
@@ -367,8 +360,8 @@ class Solver(Utils):
         # Print out training information.
         et = time.time() - self.start_time
         et = str(datetime.timedelta(seconds=et))[:-7]
-        log = "Elapsed [{}],  [{}/{}], Epoch [{}/{}]".format(
-            et, self.iteration+1, len(self.data_loader), self.epoch+1, self.num_epochs)
+        log = "Elapsed [{}], Iteration [{}/{}], Scale [{}/{}]".format(
+            et, self.iteration + 1, 1000, self.scale_current + 1, self.num_scale)
         for tag, value in self.loss_visualization.items():
             log += ", {}: {:.4f}".format(tag, value)
         print(log)
@@ -377,8 +370,6 @@ class Solver(Utils):
             for tag, value in self.loss_visualization.items():
                 self.writer.add_scalar(
                     tag, value, global_step=self.global_counter)
-
-
 
     def animation(self, mode='animate_image'):
         from PIL import Image
@@ -412,7 +403,7 @@ class Solver(Utils):
                         Image.open(image_path)).cuda()
                     reference_expression_images.append(splitted_lines[0])
                     targets[idx, :] = torch.Tensor(
-                        np.array(list(map(lambda x: float(x)/5., splitted_lines[1::]))))
+                        np.array(list(map(lambda x: float(x) / 5., splitted_lines[1::]))))
 
         if mode == 'animate_random_batch':
             animation_batch_size = 7
@@ -435,13 +426,13 @@ class Solver(Utils):
                     torch.ones((animation_batch_size + 1)
                                * 2, 3, 128, 128).cuda()
 
-                save_images[1:animation_batch_size+1] = images_to_animate
-                save_images[animation_batch_size+1] = input_images[target_idx]
+                save_images[1:animation_batch_size + 1] = images_to_animate
+                save_images[animation_batch_size + 1] = input_images[target_idx]
                 save_images[animation_batch_size +
-                            2:(animation_batch_size + 1)*2] = resulting_images
+                            2:(animation_batch_size + 1) * 2] = resulting_images
 
-                save_image((save_images+1)/2, os.path.join(self.animation_results_dir,
-                                                           reference_expression_images[target_idx]))
+                save_image((save_images + 1) / 2, os.path.join(self.animation_results_dir,
+                                                               reference_expression_images[target_idx]))
 
         if mode == 'animate_image':
 
@@ -459,9 +450,9 @@ class Solver(Utils):
                     resulting_image = self.imFromAttReg(
                         resulting_images_att, resulting_images_reg, image_to_animate).cuda()
 
-                    save_image((resulting_image+1)/2, os.path.join(self.animation_results_dir,
-                                                                   image_path.split('/')[-1].split('.')[0]
-                                                                   + '_' + reference_expression_images[target_idx]))
+                    save_image((resulting_image + 1) / 2, os.path.join(self.animation_results_dir,
+                                                                       image_path.split('/')[-1].split('.')[0]
+                                                                       + '_' + reference_expression_images[target_idx]))
 
         # """ Code to modify single Action Units """
 
