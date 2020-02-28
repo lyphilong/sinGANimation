@@ -44,6 +44,7 @@ class Solver(Utils):
         self.num_scale_prev = 1
         self.scale = 0
 
+        #dùng để train tiếp tục được
         if self.resume_iters:
             self.first_iteration = self.resume_iters
             #Tiến hành load lại model khi ở scale kế tiếp
@@ -54,12 +55,13 @@ class Solver(Utils):
 
         self.start_time = time.time()
         self.alpha_rec = 1
-        self.get_training_data()
+        self.get_training_data() #Lấy dữ liệu
 
+        # Tiến hành train theo scale
         for scale in range(self.first_scale, self.num_scale):
             self.scale_current = scale
 
-            for iteration in range(1000):
+            for iteration in range(10):
 
                 self.iteration = iteration
 
@@ -142,9 +144,13 @@ class Solver(Utils):
         # Compute loss with real images.
 
         if (self.scale_current != self.num_scale_prev and self.scale_current != 0):
-            self.x_real = self.imsize(self.x_real, 3/4)
+            print(self.x_real.shape)
+            self.x_real = self.resize_tensor(self.x_real, 7/4)
+            print(self.x_real.shape)
 
         critic_output, classification_output = self.D(self.x_real)
+        print(classification_output.shape)
+        print(critic_output.shape)
         # lấy hai kết quả một cái của D_I và D_Y ra
         d_loss_critic_real = -torch.mean(critic_output)
         # tính loss cho d
@@ -192,8 +198,10 @@ class Solver(Utils):
     def train_generator(self):
         # Tại scale đầu tiên thì input của G là tấm ảnh thật, nhưng khi lên scale thứ hai thì input của G là ảnh tái cấu trúc từ scale trước nó.
         self.inputG = self.x_real
-        if (self.scale_current > 1):
-            self.inputG = self.imsize(self.x_rec, scale_factor=7 / 4)
+        if (self.scale_current > 1): 
+          #đưa ảnh ra từ tensor sang numpy rồi mới scale ảnh
+            self.inputG = self.resize_tensor(self.x_rec, scale_factor=7 / 4)
+            print(self.inputG)
 
         # Original-to-target domain.
         self.label_trg = self.label_trg.view(1, 17)
