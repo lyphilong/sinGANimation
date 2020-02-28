@@ -10,6 +10,11 @@ import re
 
 import cv2
 
+import torchvision
+from torchvision import transforms
+from PIL import Image
+
+
 class Utils:
 
     def build_model(self):
@@ -37,16 +42,30 @@ class Utils:
         self.logger = Logger(self.log_dir)
         self.writer = SummaryWriter(logdir=self.log_dir)
 
+    def resize_tensor(self,img_tensor,scale_factor=None):
+      final_output = None
+      batch_size, channel, height, width = img_tensor.shape
+      img_tensor = torch.squeeze(img_tensor,1)
+
+      # Tính lại heigh and width cho ảnh scale
+      w = int(img_tensor.shape[3] * (scale_factor))
+      h = int(img_tensor.shape[2] * (scale_factor))
+
+      for img in img_tensor:
+        img_PIL = transforms.ToPILImage()(img)
+        img_PIL = torchvision.transforms.Resize([h,w])(img_PIL)
+        img_PIL = torchvision.transforms.ToTensor()(img_PIL)
+        final_output = img_PIL
+
+      final_output = torch.unsqueeze(final_output, 1)
+      final_output = final_output.view(final_output.shape[1],final_output.shape[0],final_output.shape[2],final_output.shape[3])
+      print(final_output.shape)
+      return final_output
+    
     def smooth_loss(self, att):
         return torch.mean(torch.mean(torch.abs(att[:, :, :, :-1] - att[:, :, :, 1:])) +
                           torch.mean(torch.abs(att[:, :, :-1, :] - att[:, :, 1:, :])))
 
-    def imsize(self, img, scale_factor):
-        width = int(img.shape[1] * scale_factor / 100)
-        height = int(img.shape[0] * scale_factor / 100)
-        dim = (width, height)
-        img = cv2.resize(img, dim, interpolation = cv2.INTER_AREA)
-        return img
 
 
     def print_network(self, model, name):
