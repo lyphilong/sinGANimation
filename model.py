@@ -126,7 +126,7 @@ class Generator(BaseNetwork):
 class Discriminator(BaseNetwork):
     """Discriminator network with PatchGAN."""
 
-    def __init__(self, image_size=128, conv_dim=64, c_dim=5, repeat_num=6):
+    def __init__(self, image_size = 128, conv_dim=64, c_dim=5, repeat_num=6):
         super(Discriminator, self).__init__()
 
         layers = []
@@ -141,7 +141,10 @@ class Discriminator(BaseNetwork):
             layers.append(nn.LeakyReLU(0.01))
             curr_dim = curr_dim * 2
 
+       
         kernel_size = int(image_size / np.power(2, repeat_num))
+        
+
         self.main = nn.Sequential(*layers)
         self.conv1 = nn.Conv2d(curr_dim, 1, kernel_size=3,
                                stride=1, padding=1, bias=False)
