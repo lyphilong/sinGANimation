@@ -89,6 +89,7 @@ class Generator(BaseNetwork):
             curr_dim = curr_dim // 2
 
         self.main = nn.Sequential(*layers)
+        print(self.main)
 
         self.debug4 = nn.Sequential(*layers)
 
@@ -113,9 +114,13 @@ class Generator(BaseNetwork):
 
         c = c.unsqueeze(2).unsqueeze(3)
         c = c.expand(c.size(0), c.size(1), x.size(2), x.size(3))
+        print(c.shape)
+        print(x.shape)
 
         x = torch.cat([x, c], dim=1)
+        print(x.shape)
         features = self.main(x)
+        print(features.shape)
 
         reg = self.im_reg(features)
         att = self.im_att(features)
@@ -148,6 +153,9 @@ class Discriminator(BaseNetwork):
         self.main = nn.Sequential(*layers)
         self.conv1 = nn.Conv2d(curr_dim, 1, kernel_size=3,
                                stride=1, padding=1, bias=False)
+        self.avg_pool  = nn.AvgPool2d(kernel_size=2)
+        self.one_one_cov = nn.Conv2d(
+            curr_dim, c_dim, kernel_size=1, bias=False)
         self.conv2 = nn.Conv2d(
             curr_dim, c_dim, kernel_size=kernel_size, bias=False)
 
@@ -156,7 +164,8 @@ class Discriminator(BaseNetwork):
     def forward(self, x):
         h = self.main(x)
         out_src = self.conv1(h)
-        out_cls = self.conv2(h)
+        avg_pool  = self.avg_pool(h)
+        out_cls = self.one_one_cov(avg_pool) #cần fix cho về 17 x 1
 
         # out_cls.view(out_cls.size(0), out_cls.size(1))
         return out_src.squeeze(), out_cls.squeeze()
