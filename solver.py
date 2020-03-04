@@ -41,8 +41,8 @@ class Solver(Utils):
         self.global_counter = 0
         self.first_scale = 0
         self.num_scale = 2
-        self.num_scale_prev = 1
-        self.scale = 0
+        self.num_scale_prev = 0
+        self.scale = 1
 
         #dùng để train tiếp tục được
         if self.resume_iters:
@@ -61,7 +61,8 @@ class Solver(Utils):
         for scale in range(self.first_scale, self.num_scale):
             self.scale_current = scale
 
-            for iteration in range(10):
+
+            for iteration in range(1000):
 
                 self.iteration = iteration
 
@@ -96,7 +97,7 @@ class Solver(Utils):
             TO DO: 
 
             '''
-            self.num_scale_prev = self.num_scale
+            self.num_scale_prev = self.scale_current
             self.save_models(self.iteration, self.scale)
             '''
             TODO: 
@@ -144,16 +145,20 @@ class Solver(Utils):
         # Compute loss with real images.
 
         if (self.scale_current != self.num_scale_prev and self.scale_current != 0):
+            print(self.scale_current)
+            print(self.num_scale_prev)
             print(self.x_real.shape)
             self.x_real = self.resize_tensor(self.x_real, 7/4)
+            self.num_scale_prev = self.scale_current
+            
             print(self.x_real.shape)
 
-        critic_output, classification_output = self.D(self.x_real)
-        print(classification_output.shape)
-        print(critic_output.shape)
+        critic_output, classification_output = self.D(self.x_real) #fix lỗi ở đây cho output ra 17 x 1
         # lấy hai kết quả một cái của D_I và D_Y ra
         d_loss_critic_real = -torch.mean(critic_output)
         # tính loss cho d
+        print(classification_output.shape)
+        print(self.label_org)
         d_loss_classification = torch.nn.functional.mse_loss(
             classification_output, self.label_org)
         # tính loss cho d của phần loss mse của AUs_hat_fake - AUs_target
