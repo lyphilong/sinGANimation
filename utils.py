@@ -52,6 +52,7 @@ class Utils:
       h = int(img_tensor.shape[2] * (scale_factor))
 
       for img in img_tensor:
+        img = img.cpu()
         img_PIL = transforms.ToPILImage()(img)
         img_PIL = torchvision.transforms.Resize([h,w])(img_PIL)
         img_PIL = torchvision.transforms.ToTensor()(img_PIL)
@@ -59,7 +60,7 @@ class Utils:
 
       final_output = torch.unsqueeze(final_output, 1)
       final_output = final_output.view(final_output.shape[1],final_output.shape[0],final_output.shape[2],final_output.shape[3])
-      print(final_output.shape)
+      final_output = final_output.cuda()
       return final_output
     
     def smooth_loss(self, att):
@@ -124,30 +125,30 @@ class Utils:
 
         return x, c
 
-    def save_models(self, iteration, epoch):
+    def save_models(self, iteration, scale):
         try:  # To avoid crashing on the first step
             os.remove(os.path.join(self.model_save_dir,
-                                   '{}-{}-G.ckpt'.format(iteration+1-self.model_save_step, epoch)))
+                                   '{}-scale {}-G.ckpt'.format(iteration+1-self.model_save_step, scale)))
             os.remove(os.path.join(self.model_save_dir,
-                                   '{}-{}-D.ckpt'.format(iteration+1-self.model_save_step, epoch)))
+                                   '{}-scale {}-D.ckpt'.format(iteration+1-self.model_save_step, scale)))
             os.remove(os.path.join(self.model_save_dir,
-                                   '{}-{}-G_optim.ckpt'.format(iteration+1-self.model_save_step, epoch)))
+                                   '{}-scale {}-G_optim.ckpt'.format(iteration+1-self.model_save_step, scale)))
             os.remove(os.path.join(self.model_save_dir,
-                                   '{}-{}-D_optim.ckpt'.format(iteration+1-self.model_save_step, epoch)))
+                                   '{}-scale {}-D_optim.ckpt'.format(iteration+1-self.model_save_step, scale)))
         except:
             pass
 
         G_path = os.path.join(self.model_save_dir,
-                              '{}-{}-G.ckpt'.format(iteration+1, epoch))
+                              '{}-scale {}-G.ckpt'.format(iteration+1, scale))
         D_path = os.path.join(self.model_save_dir,
-                              '{}-{}-D.ckpt'.format(iteration+1, epoch))
+                              '{}-scale {}-D.ckpt'.format(iteration+1, scale))
         torch.save(self.G.state_dict(), G_path)
         torch.save(self.D.state_dict(), D_path)
 
         G_path_optim = os.path.join(
-            self.model_save_dir, '{}-{}-G_optim.ckpt'.format(iteration+1, epoch))
+            self.model_save_dir, '{}-scale {}-G_optim.ckpt'.format(iteration+1, scale))
         D_path_optim = os.path.join(
-            self.model_save_dir, '{}-{}-D_optim.ckpt'.format(iteration+1, epoch))
+            self.model_save_dir, '{}-scale {}-D_optim.ckpt'.format(iteration+1, scale))
         torch.save(self.g_optimizer.state_dict(), G_path_optim)
         torch.save(self.d_optimizer.state_dict(), D_path_optim)
 
