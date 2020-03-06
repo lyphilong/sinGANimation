@@ -75,11 +75,12 @@ class Solver(Utils):
                 if (self.iteration + 1) % self.sample_step == 0:
                     self.print_generations(generation_outputs)
 
-                if self.iteration % self.model_save_step == 0:
-                    self.save_models(self.iteration, self.scale)
+               # if self.iteration % self.model_save_step == 0:
+               #     self.save_models(self.iteration, self.scale)
 
                 self.update_tensorboard()
-                self.global_counter += 1
+                self.global_counter += 1 
+                
             # if self.iteration % self.log_step == 0:
 
             # Decay learning rates. , giảm learning rate, giảm đi 0.1
@@ -97,6 +98,7 @@ class Solver(Utils):
             TO DO: 
 
             '''
+            self.save_models(self.iteration, self.scale)
             self.num_scale_prev = self.scale_current
             self.save_models(self.iteration, self.scale)
             '''
@@ -134,7 +136,7 @@ class Solver(Utils):
             assert not torch.equal(
                 self.label_trg_virtual, self.label_trg), "Target label and virtual label are the same"
 
-    def get_random_labels_list(self):
+    def get_random_labels_list(self): #Lấy đại 1 cái AUs bất kỳ 
         trg_list = []
         trg_list_aux = self.data_loader.dataset[1][1]
         trg_list.append(trg_list_aux.numpy() +
@@ -145,20 +147,15 @@ class Solver(Utils):
         # Compute loss with real images.
 
         if (self.scale_current != self.num_scale_prev and self.scale_current != 0):
-            print(self.scale_current)
-            print(self.num_scale_prev)
-            print(self.x_real.shape)
             self.x_real = self.resize_tensor(self.x_real, 7/4)
             self.num_scale_prev = self.scale_current
-            
-            print(self.x_real.shape)
-
+ 
         critic_output, classification_output = self.D(self.x_real) #fix lỗi ở đây cho output ra 17 x 1
         # lấy hai kết quả một cái của D_I và D_Y ra
         d_loss_critic_real = -torch.mean(critic_output)
         # tính loss cho d
-        print(classification_output.shape)
-        print(self.label_org)
+        print('classification AUs',classification_output) #In AUs 
+        print('AUs gốc',self.label_org) #In AUs gốc
         d_loss_classification = torch.nn.functional.mse_loss(
             classification_output, self.label_org)
         # tính loss cho d của phần loss mse của AUs_hat_fake - AUs_target
@@ -206,7 +203,6 @@ class Solver(Utils):
         if (self.scale_current > 1): 
           #đưa ảnh ra từ tensor sang numpy rồi mới scale ảnh
             self.inputG = self.resize_tensor(self.x_rec, scale_factor=7 / 4)
-            print(self.inputG)
 
         # Original-to-target domain.
         self.label_trg = self.label_trg.view(1, 17)
