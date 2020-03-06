@@ -89,7 +89,7 @@ class Generator(BaseNetwork):
             curr_dim = curr_dim // 2
 
         self.main = nn.Sequential(*layers)
-        print(self.main)
+        #print(self.main) In model ra
 
         self.debug4 = nn.Sequential(*layers)
 
@@ -114,13 +114,9 @@ class Generator(BaseNetwork):
 
         c = c.unsqueeze(2).unsqueeze(3)
         c = c.expand(c.size(0), c.size(1), x.size(2), x.size(3))
-        print(c.shape)
-        print(x.shape)
 
         x = torch.cat([x, c], dim=1)
-        print(x.shape)
         features = self.main(x)
-        print(features.shape)
 
         reg = self.im_reg(features)
         att = self.im_att(features)
